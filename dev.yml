@@ -1,8 +1,10 @@
 ---
 - hosts: dev
   vars_prompt:
-    - name: "mysql_root_password"
-      prompt: "what is the mysql pass?"
+    - name: "mysql_password"
+      prompt: "Mysql pass"
+    - name: "redis_password"
+      prompt: "Redis pass"
   sudo: yes
   tasks:
   - name: Install MariaDB repository
@@ -26,7 +28,7 @@
     notify:
       restart redis
   - name: Setup password redis
-    lineinfile: dest=/etc/redis/redis.conf regexp='^(.*)requirepass' line="requirepass 3snFYtiVBw5EyJChYnamGVTq3V3aYkqvdYAvVBm7BGvWcgwUdv" state=present
+    lineinfile: dest=/etc/redis/redis.conf regexp='^(.*)requirepass' line="requirepass {{ redis_pass }}" state=present
     notify:
       restart redis
   - name: Setup mysql
@@ -36,9 +38,9 @@
     mysql_user: 
       name: pn
       host: "{{ item }}" 
-      password: "{{ mysql_root_password }}"
+      password: "{{ mysql_password }}"
       login_user: on
-      login_password: "{{ mysql_root_password }}"
+      login_password: "{{ mysql_password }}"
       check_implicit_admin: yes
       priv: "*.*:ALL,GRANT"
     with_items:
