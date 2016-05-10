@@ -1,0 +1,11 @@
+[data]
+163.172.144.144 ansible_ssh_user=root
+
+[web]
+212.47.233.136 ansible_ssh_user=root
+
+[worker]
+163.172.129.88 ansible_ssh_user=root
+
+[dev]
+163.172.139.189 ansible_ssh_user=root
