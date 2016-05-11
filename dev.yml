@@ -3,60 +3,33 @@
   vars_prompt:
     - name: "mysql_password"
       prompt: "Mysql pass"
-    - name: "redis_password"
-      prompt: "Redis pass"
-  sudo: yes
   tasks:
-  - name: Install MariaDB repository
+
+  - name: Add MariaDB repository
     apt_repository: repo='deb http://ftp.igh.cnrs.fr/pub/mariadb/repo/10.0/ubuntu trusty main' state=present
+
   - name: Add repository key to the system
     apt_key: keyserver=keyserver.ubuntu.com id=0xcbcb082a1bb943db
+
   - name: Install MariaDB Server
     apt: name={{ item }} state=latest update_cache=yes
     with_items:
      - mariadb-server
-     - redis-server
-     - makepasswd
      - python-mysqldb
-     - python-redis
-  - name: Create MySQL User
-    mysql_user: name=pn priv=parkitectnexus.*:ALL state=present
-  - name: Create MySQL DB
-    mysql_db: name=parkitectnexus state=present
-  - name: Setup bin address redis
-    lineinfile: dest=/etc/redis/redis.conf regexp='^(.*)bind' line="bind 0.0.0.0" state=present
-    notify:
-      restart redis
-  - name: Setup password redis
-    lineinfile: dest=/etc/redis/redis.conf regexp='^(.*)requirepass' line="requirepass {{ redis_pass }}" state=present
-    notify:
-      restart redis
-  - name: Setup mysql
-    ini_file: dest=/etc/mysql/my.cnf section=mysqld option=bind-address value=0.0.0.0 mode=0600 backup=yes
-  - name: update mysql root password for all root accounts
-    sudo: yes
-    mysql_user: 
-      name: pn
-      host: "{{ item }}" 
-      password: "{{ mysql_password }}"
-      login_user: on
-      login_password: "{{ mysql_password }}"
-      check_implicit_admin: yes
-      priv: "*.*:ALL,GRANT"
+
+  - name: Install Redis Server
+    apt: name={{ item }} state=latest update_cache=yes
     with_items:
-      - "{{ ansible_hostname }}"
-      - 127.0.0.1
-      - ::1
-      - localhost 
-      - "{{ groups['web'] }}"
-      - "{{ groups['worker'] }}"
-    notify:
-      restart mariadb
+     - redis-server
+     - python-redis
+
   - name: Install nginx
     apt: name=nginx state=latest update_cache=yes
-  - name: Install PHP 7 ppa
+
+  - name: Add PHP 7 ppa
     apt_repository: repo='ppa:ondrej/php' state=present
-  - name: Install PHP 7
+
+  - name: Install PHP 7 & extensions
     apt: name={{ item }} state=latest update_cache=yes
     with_items:
       - php7.0
@@ -67,55 +40,107 @@
       - php7.0-dom
       - php7.0-zip
       - php7.0-gd
-      - mono-complete
+
+  - name: Install Mono
+    apt: name=mono-complete state=latest update_cache=yes
+
   - name: Install Git
     apt: name=git state=latest update_cache=yes
+
   - name: Install composer
     shell: curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
     args:
       creates: /usr/local/bin/composer
+
   - name: Install nodejs
     apt: name=nodejs state=latest update_cache=yes
+
   - name: Install npm
     apt: name=npm state=latest update_cache=yes
-  - name: Linking node
+
+  - name: Symminking node
     file: src=/usr/bin/nodejs dest=/usr/bin/node state=link
+
   - name: Updating npm
     npm: name=npm global=true
+
   - name: Install bower
     npm: name=bower global=true
+
   - name: Install gulp
     npm: name=gulp global=true
+
+  - name: Install Supervisor
+    apt: name=supervisor state=latest update_cache=yes
+
+  - name: Create MySQL User
+    mysql_user: name=pn priv=parkitectnexus.*:ALL password={{ mysql_password }} state=present
+
+  - name: Create MySQL DB
+    mysql_db: name=parkitectnexus state=present
+
+  - name: Update MySQL passes
+    mysql_user:
+      name: pn
+      host: "{{ item }}"
+      password: "{{ mysql_password }}"
+      login_user: on
+      login_password: "{{ mysql_password }}"
+      check_implicit_admin: yes
+      priv: "*.*:ALL,GRANT"
+    with_items:
+      - "{{ ansible_hostname }}"
+      - 127.0.0.1
+      - ::1
+      - localhost
+    notify:
+      restart mariadb
+
   - name: Config php fpm user
     ini_file: dest=/etc/php/7.0/fpm/pool.d/www.conf section=www option=user value=pn mode=0660 backup=yes
     notify: restart fpm
+
   - name: Config php fpm group
     ini_file: dest=/etc/php/7.0/fpm/pool.d/www.conf section=www option=group value=pn mode=0660 backup=yes
     notify: restart fpm
-  - name: Configure nginx pn
-    template: src=nginx/dev.parkitectnexus.com.conf dest=/etc/nginx/sites-available/default
+
+  - name: Config php upload max filesize
+    ini_file: dest=/etc/php/7.0/fpm/php.ini section=PHP option=upload_max_filesize value=50M mode=0660 backup=yes
+    notify: restart fpm
+
+  - name: Config php post max size
+    ini_file: dest=/etc/php/7.0/fpm/php.ini section=PHP option=post_max_size value=50M mode=0660 backup=yes
+    notify: restart fpm
+
+  - name: Config php memory limit
+    ini_file: dest=/etc/php/7.0/fpm/php.ini section=PHP option=memory_limit value=256M mode=0660 backup=yes
+    notify: restart fpm
+
+  - name: Configure nginx pn host
+    template: src=conf/dev/dev.parkitectnexus.com.conf dest=/etc/nginx/sites-available/default
     notify:
       - restart fpm
       - restart nginx
+
   - name: Configure nginx fastcgi
-    template: src=conf/fastcgi_params dest=/etc/nginx/fastcgi_params
+    template: src=conf/dev/fastcgi_params.conf dest=/etc/nginx/fastcgi_params
     notify:
       - restart fpm
       - restart nginx
+
   - name: Copy public key
-    authorized_key: user=pn key="{{ lookup('file', 'devkey.pub') }}"
-  - name: authorize envoyer to restart fpn
+    authorized_key: user=pn key="{{ lookup('file', 'conf/dev/key.pub') }}"
+
+  - name: Authorize envoyer to restart fpm
     command: "echo 'pn ALL=NOPASSWD: /usr/sbin/service php7.0-fpm reload' | sudo tee -a /etc/sudoers.d/php-fpm > /dev/null"
-  - name: Install supervisor
-    apt: name={{ item }} state=latest update_cache=yes
-    with_items:
-      - supervisor
+
   - name: Setup Laravel Scheduler
     cron: >
       job="php /home/pn/parkitectnexus.com/current/artisan schedule:run 1>> /dev/null 2>&1"
       state=present
       user=pn
       name="php artisan schedule:run"
+
   - name: Setup queues
     template: src=worker/queue dest=/etc/supervisor/conf.d/worker-{{ item }}.conf
     with_items:
@@ -123,12 +148,16 @@
       - 2
       - 3
       - 4
+
   handlers:
     - name: restart redis
       service: name=redis-server state=restarted
+
     - name: restart mariadb
       service: name=mysql state=restarted
+
     - name: restart fpm
       service: name=php7.0-fpm state=restarted
+
     - name: restart nginx
       service: name=nginx state=restarted
