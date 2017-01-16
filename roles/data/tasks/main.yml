@@ -1,12 +1,4 @@
----
-- hosts: data
-  vars_prompt:
-    - name: "mysql_password"
-      prompt: "Mysql Pass"
-    - name: "redis_password"
-      prompt: "Redis Pass"
 
-  tasks:
   - name: Add MariaDB repository
     apt_repository: repo='deb http://ftp.igh.cnrs.fr/pub/mariadb/repo/10.0/ubuntu trusty main' state=present
 
@@ -37,9 +29,9 @@
       - restart mariadb
 
   - name: Update MySQL passes
-    mysql_user: 
+    mysql_user:
       name: pn
-      host: "{{ item }}" 
+      host: "{{ item }}"
       password: "{{ mysql_password }}"
       login_user: on
       login_password: "{{ mysql_password }}"
@@ -64,10 +56,3 @@
     lineinfile: dest=/etc/redis/redis.conf regexp='^(.*)requirepass' line="requirepass {{ redis_password }}" state=present
     notify:
       restart redis
-
-  handlers:
-    - name: restart redis
-      service: name=redis-server state=restarted
-
-    - name: restart mariadb
-      service: name=mysql state=restarted

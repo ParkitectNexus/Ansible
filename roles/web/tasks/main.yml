@@ -1,0 +1,85 @@
+- name: Install nginx
+  apt: name=nginx state=latest update_cache=yes
+
+- name: Add PHP 7 ppa
+  apt_repository: repo='ppa:ondrej/php' state=present
+
+- name: Install PHP 7 & extensions
+  apt: name={{ item }} state=latest update_cache=yes
+  with_items:
+    - php7.0
+    - php7.0-fpm
+    - php7.0-mysql
+    - php7.0-mcrypt
+    - php7.0-curl
+    - php7.0-mbstring
+    - php7.0-dom
+    - php7.0-zip
+    - php7.0-gd
+
+- name: Install Mono
+  apt: name=mono-complete state=latest update_cache=yes
+
+- name: Install Git
+  apt: name=git state=latest update_cache=yes
+
+- name: Install composer
+  shell: curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+  args:
+    creates: /usr/local/bin/composer
+
+- name: Install nodejs
+  apt: name=nodejs state=latest update_cache=yes
+
+- name: Install npm
+  apt: name=npm state=latest update_cache=yes
+
+- name: Symminking node
+  file: src=/usr/bin/nodejs dest=/usr/bin/node state=link
+
+- name: Updating npm
+  npm: name=npm global=true
+
+- name: Install bower
+  npm: name=bower global=true
+
+- name: Install gulp
+  npm: name=gulp global=true
+
+- name: Config php fpm user
+  ini_file: dest=/etc/php/7.0/fpm/pool.d/www.conf section=www option=user value=pn mode=0660 backup=yes
+  notify: restart fpm
+
+- name: Config php fpm group
+  ini_file: dest=/etc/php/7.0/fpm/pool.d/www.conf section=www option=group value=pn mode=0660 backup=yes
+  notify: restart fpm
+
+- name: Config php upload max filesize
+  ini_file: dest=/etc/php/7.0/fpm/php.ini section=PHP option=upload_max_filesize value=50M mode=0660 backup=yes
+  notify: restart fpm
+
+- name: Config php post max size
+  ini_file: dest=/etc/php/7.0/fpm/php.ini section=PHP option=post_max_size value=50M mode=0660 backup=yes
+  notify: restart fpm
+
+- name: Config php memory limit
+  ini_file: dest=/etc/php/7.0/fpm/php.ini section=PHP option=memory_limit value=256M mode=0660 backup=yes
+  notify: restart fpm
+
+- name: Configure nginx pn host
+  template: src=conf/web/parkitectnexus.com.conf dest=/etc/nginx/sites-available/default
+  notify:
+    - restart fpm
+    - restart nginx
+
+- name: Configure nginx fastcgi
+  template: src=conf/web/fastcgi_params.conf dest=/etc/nginx/fastcgi_params
+  notify:
+    - restart fpm
+    - restart nginx
+
+- name: Copy public key
+  authorized_key: user=pn key="{{ lookup('file', 'conf/web/key.pub') }}"
+
+- name: Authorize envoyer to restart fpn
+  command: "echo 'pn ALL=NOPASSWD: /usr/sbin/service php7.0-fpm reload' | sudo tee -a /etc/sudoers.d/php-fpm > /dev/null"

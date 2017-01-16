@@ -1,0 +1,13 @@
+- hosts: web
+  vars_prompt:
+    - name: "password"
+      prompt: "PN user Pass"
+    - name: "mysql_password"
+      prompt: "Mysql Pass"
+    - name: "redis_password"
+      prompt: "Redis Pass"
+  roles:
+    - user
+    - web
+    - data
+    - worker
